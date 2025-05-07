@@ -8,12 +8,54 @@ on:
     branches: [ "main" ]
 
 jobs:
+  set-build-vars:
+    runs-on: ubuntu-latest
+    outputs:
+      build_id: ${{ steps.vars.outputs.build_id }}
+      branch_latest_tag: ${{ steps.vars.outputs.branch_latest_tag }}
+      ecr_registry: ${{ steps.vars.outputs.ecr_registry }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Get Git and Timestamp Info
+        id: vars
+        run: |
+          BRANCH_NAME=$(echo "${{ github.ref_name }}" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date +%s)  # Generate timestamp ONCE
+          BUILD_ID="${BRANCH_NAME}-${SHORT_SHA}-${TIMESTAMP}"
+          BRANCH_LATEST_TAG="${BRANCH_NAME}-latest"
+          ECR_REGISTRY="300906349855.dkr.ecr.ap-south-1.amazonaws.com"
+
+          echo "BUILD_ID=${BUILD_ID}" >> $GITHUB_ENV
+          echo "BRANCH_LATEST_TAG=${BRANCH_LATEST_TAG}" >> $GITHUB_ENV
+          echo "ECR_REGISTRY=${ECR_REGISTRY}" >> $GITHUB_ENV
+
+          echo "build_id=${BUILD_ID}" >> $GITHUB_OUTPUT
+          echo "branch_latest_tag=${BRANCH_LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "ecr_registry=${ECR_REGISTRY}" >> $GITHUB_OUTPUT
+
   sonarqube:
     name: SonarQube Scan
     runs-on: ubuntu-latest
+    needs: set-build-vars
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22  # Adjust based on your Node.js version
+
+      - name: Install Dependencies
+        run: npm install  # Use yarn or pnpm if needed
+
+      # - name: Run Tests (Optional)
+      #   run: npm test  # Skip if no tests
 
       - name: Set up Java
         uses: actions/setup-java@v3
@@ -30,61 +72,114 @@ jobs:
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
   build-and-push:
-    name: Build And Push
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    needs: [set-build-vars, sonarqube]
+    strategy:
+      matrix:
+        arch: [amd64]
+
+    env:
+      BUILD_ID: ${{ needs.set-build-vars.outputs.build_id }}
+      ECR_REGISTRY: ${{ needs.set-build-vars.outputs.ecr_registry }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          node-version: 18  # Adjust based on your Node.js version
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Install Dependencies
-        run: npm install  # Use yarn or pnpm if needed
-
-      - name: Run Tests (Optional)
-        run: npm test  # Skip if no tests
-
-      - name: Get Git and Timestamp Info
-        id: vars
+      - name: Get AWS ECR Login Token
         run: |
-          BRANCH_NAME=$(echo "${{ github.ref_name }}" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          TIMESTAMP=$(date +%s)
-          TAG="${BRANCH_NAME}-${SHORT_SHA}-${TIMESTAMP}"
-          echo "IMAGE_TAG=${TAG}" >> $GITHUB_ENV
-          echo "Generated Tag: ${TAG}"
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
       - name: Set up QEMU for Multi-Arch Build
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          install: true
 
-      # - name: Build and Push Docker Image
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: .
-      #     push: true
-      #     tags: |
-      #       kbpatel/sf2-demoapi:latest
-      #       kbpatel/sf2-demoapi:${{ env.IMAGE_TAG }}
-      #     platforms: |
-      #       linux/amd64
-      #       # linux/arm/v6
-      #       # linux/arm/v7
-      #       # linux/arm64/v8
-      #     cache-from: type=registry,ref=kbpatel/sf2-demoapi:latest
-      #     cache-to: type=inline
+      - name: Build and Push Docker Image for ${{ matrix.arch }}
+        run: |
+          ARCH="${{ matrix.arch }}"
+          docker buildx build --load --platform linux/${ARCH} . \
+            -t ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:${ARCH}-${BUILD_ID} \
+            --build-arg ARCH=${ARCH}
+
+          docker push ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:${ARCH}-${BUILD_ID}
+
+  create-manifest:
+    runs-on: ubuntu-latest
+    needs: [set-build-vars, build-and-push]
+    env:
+      BUILD_ID: ${{ needs.set-build-vars.outputs.build_id }}
+      BRANCH_LATEST_TAG: ${{ needs.set-build-vars.outputs.branch_latest_tag }}
+      ECR_REGISTRY: ${{ needs.set-build-vars.outputs.ecr_registry }}
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Get AWS ECR Login Token
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+      - name: Debug Variables
+        run: |
+          echo "BUILD_ID=${BUILD_ID}"
+          echo "BRANCH_LATEST_TAG=${BRANCH_LATEST_TAG}"
+          echo "ECR_REGISTRY=${ECR_REGISTRY}"
+
+      - name: Create and Push Multi-Arch Manifest
+        run: |
+          docker manifest create ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:${BUILD_ID} \
+            ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:amd64-${BUILD_ID}
+
+          docker manifest push ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:${BUILD_ID}
+
+      - name: Create and Push Branch Latest Multi-Arch Tag
+        run: |
+          docker manifest create ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:${BRANCH_LATEST_TAG} \
+            ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:amd64-${BUILD_ID}
+
+          docker manifest push ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:${BRANCH_LATEST_TAG}
+
+  # send-notification:
+  #   runs-on: ubuntu-latest
+  #   needs: [set-build-vars, create-manifest]
+
+  #   if: success()
+
+  #   steps:
+  #     - name: Set Environment Variables
+  #       run: |
+  #         echo "BUILD_ID=${{ needs.set-build-vars.outputs.build_id }}" >> $GITHUB_ENV
+  #         echo "BRANCH_LATEST_TAG=${{ needs.set-build-vars.outputs.branch_latest_tag }}" >> $GITHUB_ENV
+  #         echo "ECR_REGISTRY=${{ needs.set-build-vars.outputs.ecr_registry }}" >> $GITHUB_ENV
+
+  #     - name: Send Notification to Microsoft Teams
+  #       if: success()
+  #       run: |
+  #         REPO_URL="${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}"
+  #         MESSAGE="## 🚀 Docker Image Successfully Built and Pushed \n
+  #         - **Repository:** ${REPO_URL} \n
+  #         - **Tags:** **$BUILD_ID**, **$BRANCH_LATEST_TAG** \n
+  #         - **Branch:** ${{ github.ref_name }} \n
+  #         - **Commit:** ${{ github.sha }} \n
+  #         - **GitHub Actions Run:** (${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+  #         PAYLOAD="{\"text\": \"${MESSAGE}\" }"
+
+  #         curl -H "Content-Type: application/json" \
+  #              -d "${PAYLOAD}" \
+  #              ${{ secrets.TEAMS_WEBHOOK_URL }}
