@@ -3,10 +3,12 @@ const db = require('../../../config/db');
 const users = function () { };
 
 users.users = async function (req, result) {
+    let params = req.params;
+
     let General_User = db.collection('General_User');
     let findRecord = {};
-    if (req.id !== undefined) {
-        findRecord = await General_User.find({ id: req.id }).toArray();
+    if (params.id !== undefined) {
+        findRecord = await General_User.find({ id: params.id }).toArray();
     } else {
         findRecord = await General_User.find({}).toArray();
     }

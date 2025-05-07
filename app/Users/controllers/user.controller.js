@@ -1,7 +1,7 @@
 const userModules = require('../models/user.model');
 
 exports.users = (req, res) => {
-    userModules.users(req.query, (err, data) => {
+    userModules.users(req, (err, data) => {
         if (err) {
             res.status(500).send({ message: err.message || "Some error occurred while retrieving users." });
         } else {

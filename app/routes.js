@@ -3,13 +3,7 @@ module.exports = app => {
     var router = require("express").Router();
 
     //User module
-    // router.get("/users", users.users);
-    // router.post("/addUser", users.addUser);
-    // router.put("/updateUser", users.updateUser);
-    // router.delete("/deleteUser", users.deleteUser);
-
-    // Other Ways to add routes
-
+    router.get("/users/:id", users.users);
     router.get("/users", users.users);
     router.post("/users", users.addUser);
     router.put("/users", users.updateUser);
