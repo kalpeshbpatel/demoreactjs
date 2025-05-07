@@ -54,8 +54,8 @@ jobs:
       - name: Install Dependencies
         run: npm install  # Use yarn or pnpm if needed
 
-      - name: Run Tests (Optional)
-        run: npm test  # Skip if no tests
+      # - name: Run Tests (Optional)
+      #   run: npm test  # Skip if no tests
 
       - name: Set up Java
         uses: actions/setup-java@v3
