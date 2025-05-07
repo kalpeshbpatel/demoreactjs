@@ -2,6 +2,7 @@ const userModules = require('../models/user.model');
 
 exports.users = (req, res) => {
     userModules.users(req, (err, data) => {
+
         if (err) {
             res.status(500).send({ message: err.message || "Some error occurred while retrieving users." });
         } else {
@@ -38,4 +39,8 @@ exports.deleteUser = (req, res) => {
             res.status(200).send(data);
         }
     });
+}
+
+exports.test = function () {
+    return 12;
 }

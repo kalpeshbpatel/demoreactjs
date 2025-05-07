@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha \"./testCase/**/*test.js\"",
-    "start": "node index.js"
+    "start": "set NODE_ENV=.env && node index.js",
+    "set-env": ".env"
   },
   "author": "shailesh",
   "license": "ISC",

@@ -1,11 +1,11 @@
 const { MongoClient } = require('mongodb');
-const dbConfig = require('./db.config.js');
+console.log(process.env.MONGO_HOST);
+const url = `mongodb://${process.env.MONGO_HOST}:${process.env.MONGO_PORT}`;
 
-const url = `mongodb://${dbConfig.HOST}:${dbConfig.PORT}`;
 
 const connection = new MongoClient(url);
 connection.connect();
 console.log("Connected to MongoDB server");
-const db = connection.db(dbConfig.DB);
+const db = connection.db(process.env.MONGO_DB);
 
 module.exports = db;

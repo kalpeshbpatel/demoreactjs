@@ -1,15 +1,17 @@
 const assert = require('assert');
 const chai = require('chai');
+expect = chai.expect;
 
-describe('User Test', function () {
-    it('should return user details', function () {
-        const user = { name: 'John Doe', age: 30 };
-        assert.strictEqual(user.name, 'John Doe');
-        assert.strictEqual(user.age, 30);
+const userCtrl = require('../app/Users/controllers/user.controller');
+
+describe('Users', function () {
+    it('test return 12 value', async function () {
+        await expect(userCtrl.test()).equal(12);
     });
+});
 
-    it('should return user age', function () {
-        const user = { name: 'Jane Doe', age: 25 };
-        assert.strictEqual(user.age, 25);
+describe('Users', function () {
+    it('should return more then one users', async function () {
+        expect(userCtrl.users()).length.to.be.greaterThan(0);
     });
 });
