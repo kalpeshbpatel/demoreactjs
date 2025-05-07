@@ -1,0 +1,90 @@
+# .github/workflows/sonarqube.yml
+name: SonarQube Scan
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  sonarqube:
+    name: SonarQube Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@master
+        with:
+          args: >
+            -Dsonar.projectKey=scarfall-new
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+  build-and-push:
+    name: Build And Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18  # Adjust based on your Node.js version
+
+      - name: Install Dependencies
+        run: npm install  # Use yarn or pnpm if needed
+
+      - name: Run Tests (Optional)
+        run: npm test  # Skip if no tests
+
+      - name: Get Git and Timestamp Info
+        id: vars
+        run: |
+          BRANCH_NAME=$(echo "${{ github.ref_name }}" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date +%s)
+          TAG="${BRANCH_NAME}-${SHORT_SHA}-${TIMESTAMP}"
+          echo "IMAGE_TAG=${TAG}" >> $GITHUB_ENV
+          echo "Generated Tag: ${TAG}"
+
+      - name: Set up QEMU for Multi-Arch Build
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # - name: Build and Push Docker Image
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: .
+      #     push: true
+      #     tags: |
+      #       kbpatel/sf2-demoapi:latest
+      #       kbpatel/sf2-demoapi:${{ env.IMAGE_TAG }}
+      #     platforms: |
+      #       linux/amd64
+      #       # linux/arm/v6
+      #       # linux/arm/v7
+      #       # linux/arm64/v8
+      #     cache-from: type=registry,ref=kbpatel/sf2-demoapi:latest
+      #     cache-to: type=inline
