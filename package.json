@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha --env-file=.env && \"./testCase/**/*test.js\"",
-    "start": "node --env-file=.env index.js",
+    "start": "node index.js",
     "set-env": ".env"
   },
   "author": "shailesh",
