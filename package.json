@@ -1,0 +1,24 @@
+{
+  "name": "npmserver",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha \"./testCase/**/*test.js\"",
+    "start": "node index.js"
+  },
+  "author": "shailesh",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "http": "^0.0.1-security",
+    "mongodb": "^6.16.0"
+  },
+  "devDependencies": {
+    "chai": "^5.2.0",
+    "mocha": "^11.2.2",
+    "nodemon": "^3.1.10",
+    "sinon": "^20.0.0"
+  }
+}
