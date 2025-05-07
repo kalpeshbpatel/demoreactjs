@@ -71,10 +71,9 @@ jobs:
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
-
   build-and-push:
     runs-on: ubuntu-latest
-    needs: sonarqube
+    needs: [set-build-vars, sonarqube]
     strategy:
       matrix:
         arch: [amd64]
@@ -114,8 +113,6 @@ jobs:
             --build-arg ARCH=${ARCH}
 
           docker push ${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY }}:${ARCH}-${BUILD_ID}
-
-  
 
   create-manifest:
     runs-on: ubuntu-latest
